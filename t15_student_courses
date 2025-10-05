@@ -1,0 +1,57 @@
+struct Course {
+    subject : String,
+    grade   : u8,
+}
+struct Student{
+    name    : String,
+    age     : u8,
+    courses : Vec<Course>,
+}
+
+impl Student {
+    
+    fn describe(&self) {
+        println!("Name : {} - Age : {}", self.name, self.age);
+        for course in &self.courses {
+            println!("   {}: {}", course.subject, course.grade);
+        }
+    }
+
+    fn new(name: &str, age: u8) -> Student{
+        Student { 
+            name : name.to_string(), 
+            age, 
+            courses: vec![],
+        }
+    }
+    fn add_course(&mut self, subject: &str, grade: u8){
+        self.courses.push(Course { subject: subject.to_string(), grade: grade });
+    }
+
+}
+fn main () {
+    let mut profil: Vec<Student> = Vec::new();
+
+    let mut malo = Student::new("Malo", 21);
+    malo.add_course("Maths", 15);
+    malo.add_course("Rust", 18);
+
+    let mut rayan = Student::new("Rayan", 21);
+    rayan.add_course("Maths", 20);
+    rayan.add_course("Rust", 12);
+
+    let mut gab = Student::new("Gab", 21);
+    gab.add_course("Maths", 10);
+    gab.add_course("Rust", 10);
+
+    profil.push(malo);
+    profil.push(rayan);
+    profil.push(gab);
+
+        
+    println!("ALL STUDENTS \n");
+    for stud in &profil {
+        stud.describe();
+    }
+}
+
