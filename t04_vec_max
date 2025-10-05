@@ -1,0 +1,14 @@
+fn main(){
+
+    let numbers = vec![12, 45, 3, 67, 23, 89, 5];
+    
+    let mut max = numbers[0];
+    for n in &numbers {
+        if *n > max {
+            max = *n;
+        }
+    }
+
+    println!("{}", max);
+
+}
