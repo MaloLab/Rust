@@ -1,0 +1,38 @@
+struct Student{
+    name : String,
+    age  : u8,
+}
+
+fn main () {
+    let mut profil: Vec<Student> = Vec::new();
+
+    profil.push(Student { name: ("Malo".to_string()), age: (21) });
+    profil.push(Student { name: "Malo".to_string(), age: 21 });
+    profil.push(Student { name: "Rayan".to_string(), age: 22 });
+    profil.push(Student { name: "Fethi".to_string(), age: 21 });
+    profil.push(Student { name: "Gab".to_string(), age: 20 });
+    profil.push(Student { name: "Malek".to_string(), age: 21 });
+    profil.push(Student { name: "Noyan".to_string(), age: 21 });
+
+    for stud in &profil {
+        println!("Name : {} - Age : {}", stud.name, stud.age);
+    }
+
+    //ENLEVER LES COMME EN DESSOUS POUR FAIRE LA SOMME : 
+
+    /* METHODE 1
+    let mut sum = 0;
+    for stud in &profil {
+        sum += stud.age as u32; 
+    }
+    */
+
+    /* METHODE 2 */
+    let sum : u32 = profil.iter().map(|stud| stud.age as u32).sum();
+     
+
+    let average: u32 = sum / profil.len() as u32;
+
+    println!("\n Average {}",average);
+
+}
