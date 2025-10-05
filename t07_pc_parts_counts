@@ -1,0 +1,22 @@
+use std::collections::HashMap;
+
+fn main(){
+
+    let components: Vec<&str> = vec!["cpu", "gpu", "ram", "gpu", "ssd", "ram", "ram", "cpu"];
+    let mut counts: HashMap<String, usize> = HashMap::new();
+
+    for part in components {
+            if let Some(c) = counts.get_mut(part) {
+                *c += 1;
+            } else {
+                counts.insert(part.to_string(), 1);
+            }
+    }
+
+    print!("|");
+
+    for (key, value) in &counts {
+        print!(" {}: {} |", key, value);
+    }
+
+}
