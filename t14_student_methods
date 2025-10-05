@@ -1,0 +1,59 @@
+struct Student{
+    name : String,
+    age  : u8,
+}
+
+impl Student {
+    fn is_adult(&self) -> bool {
+        self.age >= 18
+    }
+
+    fn describe(&self) {
+        println!("Name : {} - Age : {}", self.name, self.age);
+    }
+    fn newstud(name: &str, age: u8) -> Student{
+        Student { 
+            name : name.to_string(), 
+            age, 
+        }
+    }
+}
+
+fn main () {
+    let mut profil: Vec<Student> = Vec::new();
+
+    profil.push(Student::newstud("Malo", 21));
+    profil.push(Student::newstud("Rayan", 22));
+    profil.push(Student::newstud("Gab", 16));
+
+        
+    println!("ALL STUDENTS \n");
+    for stud in &profil {
+
+        stud.describe();
+    }
+
+    println!("\nADULTS STUDENTS \n");
+    for stud in &profil {
+        if stud.is_adult() {
+            println!("{} is over 18", stud.name);
+        }
+    }
+
+    //ENLEVER LES COMME EN DESSOUS POUR FAIRE LA SOMME : 
+
+    /* METHODE 1
+    let mut sum = 0;
+    for stud in &profil {
+        sum += stud.age as u32; 
+    }
+    */
+
+    /* METHODE 2 */
+    let sum : u32 = profil.iter().map(|stud| stud.age as u32).sum();
+    
+    let average: u32 = sum / profil.len() as u32;
+
+    println!("\n Average {}",average);
+
+}
