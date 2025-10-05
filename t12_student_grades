@@ -1,0 +1,28 @@
+use std::collections::HashMap;
+fn main() {
+    let mut grades: HashMap<String, u8> = HashMap::new();
+
+    grades.insert("Malo".to_string(), 2);
+    grades.insert("Rayan".to_string(), 16);
+    grades.insert("Fethi".to_string(), 18);
+    grades.insert("Gab".to_string(), 2);
+    grades.insert("Malek".to_string(), 10);
+    grades.insert("Noyan".to_string(), 20);
+
+    println!("Before:");
+    for (name, grade) in &grades {
+        println!(" {}: {}", name, grade);
+    }
+
+    for (_name, grade) in &mut grades {
+        *grade = (*grade as f32 * 1.2).round() as u8;
+        *grade = (*grade).min(20);
+
+    }
+
+    println!("\nAfter:");
+    for (name, grade) in &grades {
+        println!(" {}: {}", name, grade);
+    }
+
+}
