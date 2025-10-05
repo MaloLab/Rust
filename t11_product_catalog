@@ -1,0 +1,23 @@
+use std::collections::HashMap;
+
+fn main(){
+
+    let mut products: HashMap<String, f64> = HashMap::new();
+
+    products.insert("SCREEN".to_string(), 179.99);
+    products.insert("CPU".to_string(), 144.0);
+    products.insert("GPU".to_string(), 449.0);
+    products.insert("SSD".to_string(), 99.99);
+    products.insert("MOTHERBOARD".to_string(), 109.24);
+
+    for (article, price) in &products {
+        println!(" {}: {}€", article, price);
+    }
+
+    println!(" ");
+
+    if let Some(price) = products.get_mut("SSD"){
+        println!("SSD : {}€", price);
+    }
+
+}
