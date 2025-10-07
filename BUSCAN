@@ -1,0 +1,127 @@
+use std::collections::VecDeque;
+use std::time::Instant;
+
+type CanId = u16;
+const TEMP_ID: CanId = 0x0100;
+
+#[derive(Debug, Clone)]
+struct CanMessage {
+    id: CanId,
+    data: Vec<u8>,
+    timestamp_ms: u64,
+}
+
+impl CanMessage {
+    fn new(id: CanId, data: Vec<u8>, timestamp_ms: u64) -> Self {
+        CanMessage { id, data, timestamp_ms }
+    }
+    fn encode_temperature(temp_c: u8) -> Vec<u8> {
+        vec![temp_c]
+    }
+    fn decode_temperature(data: &[u8]) -> Option<u8> {
+        data.get(0).copied()
+    }
+}
+
+#[derive(Debug, Clone)]
+struct Sensor {
+    id: CanId,
+    name: String,
+    lcg: u32,
+}
+
+impl Sensor {
+    fn new(id: CanId, name: impl Into<String>) -> Self {
+        Sensor { id, name: name.into(), lcg: 0xA5A5_1234 }
+    }
+    fn generate_temperature(&mut self) -> u8 {
+        self.lcg = self.lcg.wrapping_mul(1664525).wrapping_add(1013904223);
+        let v = ((self.lcg >> 16) & 0xFF) as u8;
+        15 + (v % 40)
+    }
+    fn build_message(&self, temp_c: u8, timestamp_ms: u64) -> CanMessage {
+        let data = CanMessage::encode_temperature(temp_c);
+        CanMessage::new(self.id, data, timestamp_ms)
+    }
+    fn send_message(&self, bus: &mut CanBus, msg: CanMessage) {
+        bus.transmit(msg);
+    }
+}
+
+#[derive(Debug, Clone)]
+struct Controller {
+    name: String,
+    interested_ids: Vec<CanId>,
+}
+
+impl Controller {
+    fn new(name: impl Into<String>, interested_ids: Vec<CanId>) -> Self {
+        Controller { name: name.into(), interested_ids }
+    }
+    fn receive_message(&mut self, bus: &mut CanBus) -> Option<CanMessage> {
+        while let Some(m) = bus.poll_next() {
+            if self.is_interested_in(m.id) {
+                return Some(m);
+            }
+        }
+        None
+    }
+    fn display_decoded_data(&self, msg: &CanMessage) {
+        if msg.id == TEMP_ID {
+            if let Some(t) = CanMessage::decode_temperature(&msg.data) {
+                println!("[{}] ID=0x{:03X} ts={}ms -> Température = {} °C", self.name, msg.id, msg.timestamp_ms, t);
+            }
+        } else {
+            println!("[{}] ID=0x{:03X} ts={}ms -> data={:?}", self.name, msg.id, msg.timestamp_ms, msg.data);
+        }
+    }
+    fn is_interested_in(&self, id: CanId) -> bool {
+        self.interested_ids.iter().any(|&x| x == id)
+    }
+}
+
+#[derive(Debug, Default)]
+struct CanBus {
+    queue: VecDeque<CanMessage>,
+}
+
+impl CanBus {
+    fn new() -> Self {
+        Self { queue: VecDeque::new() }
+    }
+    fn transmit(&mut self, msg: CanMessage) {
+        self.queue.push_back(msg);
+    }
+    fn poll_next(&mut self) -> Option<CanMessage> {
+        self.queue.pop_front()
+    }
+    fn is_empty(&self) -> bool {
+        self.queue.is_empty()
+    }
+}
+
+fn main() {
+    let start = Instant::now();
+    let mut bus = CanBus::new();
+    let mut sensor = Sensor::new(TEMP_ID, "Capteur Température");
+    let mut ctrl = Controller::new("Calculateur", vec![TEMP_ID]);
+
+    println!("=== Simulation bus CAN (Sensor -> Bus -> Controller) ===");
+    for _ in 0..8 {
+        let temp = sensor.generate_temperature();
+        let ts = start.elapsed().as_millis() as u64;
+        let msg = sensor.build_message(temp, ts);
+        println!("[{}] Envoi -> ID=0x{:03X} ts={}ms data={:?}", sensor.name, msg.id, msg.timestamp_ms, msg.data);
+        sensor.send_message(&mut bus, msg);
+
+        if let Some(rx) = ctrl.receive_message(&mut bus) {
+            ctrl.display_decoded_data(&rx);
+        }
+    }
+    if !bus.is_empty() {
+        while let Some(rx) = ctrl.receive_message(&mut bus) {
+            ctrl.display_decoded_data(&rx);
+        }
+    }
+    println!("=== Fin ===");
+}
