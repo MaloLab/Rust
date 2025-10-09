@@ -1,0 +1,60 @@
+use std::ops::Index;
+
+struct CANMessage {
+    id : u16,
+    data : Vec<u8>,
+    sender_id : u16
+}
+
+
+struct Device {
+    name: String,
+    id: u16,
+    subscribed_ids: Vec<u16>,
+}
+
+
+struct CANBus {
+    connected_devices: Vec<Device>,
+    message_queue: Vec<CANMessage>,
+}
+impl CANBus {
+    fn send_message(&mut self, message: CANMessage) {
+        self.message_queue.push(message);
+    }
+    
+    fn process_messages(&mut self) {
+        let messages: Vec<CANMessage> = std::mem::take(&mut self.message_queue);
+        
+        // Pour chaque message dans la file d'attente
+        for message in messages {
+            for device in &self.connected_devices {
+                if device.subscribed_ids.contains(&message.id) {
+                    println!("Le dispositif '{}' a reçu un message avec ID: {}", device.name, message.id);
+                }
+            }
+        }
+    }
+}
+
+fn main() {
+    let canmess1 = CANMessage{id : 100,data : vec![0x00, 0x01], sender_id : 1};
+    let canmess2 = CANMessage{id : 200,data : vec![0x00, 0x10], sender_id : 2};
+    let canmess3 = CANMessage{id : 200,data : vec![0x00, 0x11], sender_id : 2};
+
+
+    let mut engine = Device{name : "Engine".to_string(), id : 1, subscribed_ids : Vec::new()};
+    let mut brakes = Device{name : "Brakes".to_string(), id : 2, subscribed_ids : Vec::new()};
+    let mut dashboard = Device{name : "Dashboard".to_string(), id : 3, subscribed_ids : vec![100,200]};
+
+    let mut bus1 = CANBus{connected_devices: vec![engine, brakes, dashboard], message_queue : Vec::new()};
+
+    // Envoi des messages sur le bus
+    bus1.send_message(canmess1);
+    bus1.send_message(canmess2);
+    bus1.send_message(canmess3);
+    
+    // Traitement des messages
+    bus1.process_messages();
+
+}
