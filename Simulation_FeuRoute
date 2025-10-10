@@ -1,0 +1,203 @@
+use std::mem::take;
+use std::{thread, time};
+use std::vec;
+use rand::{rng, Rng};
+
+struct Device {
+    name: String,
+    id: u16,
+    subscribed_ids: Vec<u16>,
+    inbox: Vec<CANMessage>
+}
+impl Device {
+    fn new(name : String, id : u16, subscribed_ids : Vec<u16> ) -> Self{
+        Device{
+            name: name.to_string(),
+            id,
+            subscribed_ids,
+            inbox: Vec::new(), // toujours vide au départ
+        }
+    }
+}
+struct CANBus {
+    connected_devices: Vec<Device>,
+    message_queue: Vec<CANMessage>,
+}
+impl CANBus {
+    // Insère le message dans le bus CAN
+    fn send_message(&mut self, message: CANMessage) {
+        self.message_queue.push(message);
+    }
+    
+    fn process_messages(&mut self) {
+        let messages: Vec<CANMessage> = std::mem::take(&mut self.message_queue);
+        
+        // Pour chaque message dans la file d'attente
+        for message in messages {
+            for device in &mut self.connected_devices {
+                if device.subscribed_ids.contains(&message.id) {
+                    device.inbox.push(message.clone());
+                }
+            }
+        }
+    }
+}
+
+#[derive(Clone)]
+struct CANMessage {
+    id : u16,
+    data : Vec<u8>,
+}
+
+enum Color {
+    Vert, Orange, Rouge
+}
+fn main(){
+    
+    // Creation devices
+    let fire_controller = Device::new("fire_controller".to_string(), 1, vec![200]);
+    let detection_sensor = Device::new("car_detection".to_string(), 2, Vec::new());
+    let fire_display = Device::new("fire_display".to_string(), 3, vec![100,200,300]);
+
+    // Creation BUS
+    let mut bus = CANBus{connected_devices: vec![fire_controller, detection_sensor, fire_display], message_queue : Vec::new()};
+
+    
+    let mut feu = Color::Vert; //Set le feu initial : VERT
+    let mut reste_s = 0_000; //Set le temps a 0 secondes
+
+    let mut reduced_time = false; // Declare + Set le flag d'un véhicule qui à ete detecte au feu (controller fire)
+
+    let mut display_is_red = false; // Display 
+    let mut display_car_waiting = false; // Display
+
+
+    let mut rng = rand::thread_rng();
+
+    const ID_STATE : u16 = 100;
+    const ID_DETECT : u16 = 200;
+    const ID_COUNTDOWN : u16 = 300;
+
+    const TIME_GREEN : i32 = 5;
+    const TIME_ORANGE : i32 = 2;
+    const TIME_RED : i32 = 15;
+
+    
+    loop {
+
+        // Verifie BUS et distribue ce qui trainait ici
+        bus.process_messages();
+
+        // CONTROLLEUR FEU (1)--------------------------------------------------------------------------
+        reste_s -= 1;  // Countdown qui diminue
+        if reste_s <= 0 {
+            match feu {
+                Color::Vert =>   { feu = Color::Orange; reste_s = TIME_ORANGE; }
+                Color::Orange => { feu = Color::Rouge;  reste_s = TIME_RED; reduced_time = false }
+                Color::Rouge =>  { feu = Color::Vert;   reste_s = TIME_GREEN; }
+            }
+        }
+
+        let reste_u32: u32 = if reste_s > 0 { reste_s as u32 } else { 0 };
+
+        // Publier ID STATE (ID 100)
+        let phase_byte: u8 = match feu { Color::Vert=>0, Color::Orange=>1, Color::Rouge=>2 };
+        let reste_ms_u32: u32 = (reste_s.max(0) as u32) * 1000;
+
+        let mut data100 = Vec::with_capacity(5);
+        data100.push(phase_byte);
+        data100.extend_from_slice(&reste_ms_u32.to_le_bytes());
+        bus.send_message(CANMessage { id: ID_STATE, data: data100, });
+
+        let data300 = (reste_s.max(0) as u32).to_le_bytes().to_vec();
+        bus.send_message(CANMessage { id: ID_COUNTDOWN, data: data300 });
+        // ------------------------------------------------------------------------------------------------
+
+        // DETECTEUR VEHICULE -----------------------------------------------------------------------------
+        let mut data200: Vec<u8> = Vec::with_capacity(1);
+
+        if matches!(feu, Color::Rouge) && rng.gen_range(1..=10) == 1 {
+            bus.send_message(CANMessage { id: ID_DETECT, data: vec![0x01]});
+        }
+        // ------------------------------------------------------------------------------------------------
+
+        bus.process_messages(); //Vérifie le bus
+
+        // CONTROLLEUR FEU (2)-----------------------------------------------------------------------------
+        if let Some(dev) = bus.connected_devices.iter_mut().find(|d| d.name == "fire_controller") {
+            let inbox: Vec<CANMessage> = std::mem::take(&mut dev.inbox);
+
+            // On n'examine les messages que si une réduction est encore possible
+            if matches!(feu, Color::Rouge) && reste_s > 5 && !reduced_time {
+                for mess in inbox {
+                    if mess.id == ID_DETECT && mess.data.first() == Some(&0x01) {
+                        reste_s = 6;
+                        reduced_time = true;
+                        break;
+                    }
+                }
+            }
+        }
+         
+        // ------------------------------------------------------------------------------------------------
+
+        // AFFICHAGE FEU ---------------------------------------------------------------------------------
+        for dev in &mut bus.connected_devices {
+            if dev.name == "fire_display" {
+                let inbox = std::mem::take(&mut dev.inbox);
+
+                // les détections
+                for mess in &inbox {
+                    if mess.id == ID_DETECT && display_is_red && mess.data.first() == Some(&0x01) {
+                        display_car_waiting = true;
+                    }
+                }
+
+                // afficher les états (100)
+                for mess in inbox {
+                    if mess.id == ID_STATE {
+                        if let Some((phase, reste_ms)) = decode_state_100(&mess.data) {
+                            display_is_red = matches!(phase, Color::Rouge);
+                            if !display_is_red { display_car_waiting = false; }
+
+                            let secs = reste_ms / 1000;
+                            let car_mark = if display_is_red && display_car_waiting { " 🚗" } else { "" };
+
+                            println!("\n---TRAFFIC LIGHT---");
+                            println!(" ------");
+                            match phase {
+                                Color::Vert   => println!("|🟢⚫⚫|"),
+                                Color::Orange => println!("|⚫🟠⚫|"),
+                                Color::Rouge  => println!("|⚫⚫🔴|"),
+                            }
+                            println!(" ------");
+                            println!("{}", car_mark);
+                            println!("Time left : {}", secs);
+                            
+                        }
+                    }
+                }
+            }
+        }
+        // -----------------------------------------------------------------------------------------------
+
+        // Temps qui augmente
+        thread::sleep(time::Duration::from_millis(1000));
+}
+
+
+} 
+    
+    
+fn decode_state_100(data: &[u8]) -> Option<(Color, u32)> {
+    if data.len() < 5 { return None; }
+    let phase = match data[0] {
+        0 => Color::Vert,
+        1 => Color::Orange,
+        2 => Color::Rouge,
+        _ => return None,
+    };
+    let reste_s = u32::from_le_bytes([data[1], data[2], data[3], data[4]]);
+    Some((phase, reste_s))
+}
+
